@@ -31,16 +31,25 @@ const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height
 const CheckSquareIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>;
 const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
 const BookOpenIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>;
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
 const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
 
 // --- Components ---
 
-const Dashboard = ({ tasks }) => {
+const Dashboard = ({ tasks, events }) => {
   const [time, setTime] = useState(new Date());
+  const [quote, setQuote] = useState({ text: "Loading...", author: "..." });
 
   useEffect(() => {
     const timerId = setInterval(() => setTime(new Date()), 1000);
+    fetch("https://type.fit/api/quotes")
+        .then(response => response.json())
+        .then(data => {
+            const randomQuote = data[Math.floor(Math.random() * data.length)];
+            setQuote({ text: randomQuote.text, author: randomQuote.author || "Unknown" });
+        })
+        .catch(() => setQuote({ text: "The best way to predict the future is to create it.", author: "Peter Drucker" }));
     return () => clearInterval(timerId);
   }, []);
   
@@ -52,12 +61,19 @@ const Dashboard = ({ tasks }) => {
   }, [time]);
 
   const tasksToday = tasks.filter(t => !t.completed).length;
+  const upcomingEvents = events.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
 
   return (
     <div className="dashboard-content fade-in">
       <h1>{welcomeMessage}</h1>
       <p className="current-time">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
       <p className="current-date">{time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      
+      <div className="quote-card">
+        <p>"{quote.text}"</p>
+        <span>- {quote.author}</span>
+      </div>
+
       <div className="dashboard-summary">
         <div className="summary-card">
           <h3>Tasks Pending</h3>
@@ -65,9 +81,16 @@ const Dashboard = ({ tasks }) => {
           <span>Keep up the good work!</span>
         </div>
         <div className="summary-card">
-          <h3>Focus Session</h3>
-          <p className="summary-value">Pomodoro</p>
-          <span>Start a timer in the Focus tab.</span>
+          <h3>Upcoming Events</h3>
+          {upcomingEvents.length > 0 ? (
+            <ul className="upcoming-events-list">
+              {upcomingEvents.map(event => (
+                <li key={event.id}><strong>{event.title}</strong> - {new Date(event.date).toLocaleDateString()}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="summary-value small">No upcoming events.</p>
+          )}
         </div>
       </div>
     </div>
@@ -299,24 +322,112 @@ const NotesApp = () => {
     );
 };
 
+const Scheduler = ({ events, setEvents }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [eventTitle, setEventTitle] = useState("");
+    const [eventType, setEventType] = useState("event");
+
+    const handlePrevMonth = () => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)));
+    const handleNextMonth = () => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)));
+
+    const openAddEventModal = (date) => {
+        setSelectedDate(date);
+        setIsModalOpen(true);
+    };
+
+    const handleAddEvent = (e) => {
+        e.preventDefault();
+        if (!eventTitle.trim()) return;
+        setEvents([...events, { id: Date.now(), title: eventTitle, date: selectedDate, type: eventType }]);
+        setIsModalOpen(false);
+        setEventTitle("");
+        setEventType("event");
+    };
+
+    const renderCalendar = () => {
+        const month = currentDate.getMonth();
+        const year = currentDate.getFullYear();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        const days = [];
+        for (let i = 0; i < firstDay; i++) {
+            days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const date = new Date(year, month, i);
+            const dateString = date.toISOString().split('T')[0];
+            const dayEvents = events.filter(e => new Date(e.date).toISOString().split('T')[0] === dateString);
+
+            days.push(
+                <div key={i} className="calendar-day" onClick={() => openAddEventModal(date)}>
+                    <span>{i}</span>
+                    <div className="events-container">
+                        {dayEvents.map(event => (
+                            <div key={event.id} className={`event-marker ${event.type}`}>{event.title}</div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+        return days;
+    };
+
+    return (
+        <div className="feature-content fade-in">
+            <div className="calendar-header">
+                <button onClick={handlePrevMonth}>&lt;</button>
+                <h2>{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
+                <button onClick={handleNextMonth}>&gt;</button>
+            </div>
+            <div className="calendar-grid">
+                <div className="day-name">Sun</div><div className="day-name">Mon</div><div className="day-name">Tue</div><div className="day-name">Wed</div><div className="day-name">Thu</div><div className="day-name">Fri</div><div className="day-name">Sat</div>
+                {renderCalendar()}
+            </div>
+            {isModalOpen && (
+                <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <h3>Add Event for {selectedDate.toLocaleDateString()}</h3>
+                        <form onSubmit={handleAddEvent}>
+                            <input type="text" value={eventTitle} onChange={e => setEventTitle(e.target.value)} placeholder="Event Title" autoFocus />
+                            <select value={eventType} onChange={e => setEventType(e.target.value)}>
+                                <option value="event">Event</option>
+                                <option value="exam">Exam</option>
+                                <option value="assignment">Assignment</option>
+                            </select>
+                            <button type="submit">Add Event</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 // --- Main App Component ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tasks, setTasks] = useLocalStorage('tasks', []);
+  const [events, setEvents] = useLocalStorage('events', []);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard tasks={tasks} />;
+        return <Dashboard tasks={tasks} events={events} />;
       case 'tasks':
         return <TodoApp tasks={tasks} setTasks={setTasks} />;
       case 'focus':
         return <PomodoroTimer />;
       case 'notes':
         return <NotesApp />;
+      case 'scheduler':
+        return <Scheduler events={events} setEvents={setEvents}/>;
       default:
-        return <Dashboard tasks={tasks} />;
+        return <Dashboard tasks={tasks} events={events}/>;
     }
   };
 
@@ -444,6 +555,23 @@ export default function App() {
         color: var(--text-primary);
         margin-bottom: 0.5rem;
       }
+      .quote-card {
+        background-color: var(--bg-secondary);
+        border-left: 4px solid var(--accent);
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        border-radius: 4px;
+      }
+      .quote-card p {
+        font-style: italic;
+        color: #fff;
+      }
+      .quote-card span {
+        display: block;
+        text-align: right;
+        margin-top: 0.5rem;
+        color: var(--text-secondary);
+      }
 
       .dashboard-content .current-time {
         font-size: 1.5rem;
@@ -483,14 +611,23 @@ export default function App() {
         color: #fff;
         margin-bottom: 0.5rem;
       }
+       .summary-card .summary-value.small { font-size: 1.2rem; }
       .summary-card span {
         font-size: 0.9rem;
         color: #aaa;
       }
+      .upcoming-events-list {
+        list-style: none;
+      }
+      .upcoming-events-list li {
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+      }
+
 
       /* --- Feature Content (Shared) --- */
       .feature-content {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
       }
 
@@ -806,6 +943,89 @@ export default function App() {
           color: #888;
       }
 
+      /* Scheduler */
+      .calendar-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+      }
+      .calendar-header h2 {
+          color: var(--text-primary);
+          margin: 0;
+          padding: 0;
+          border: none;
+      }
+      .calendar-header button {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          color: var(--text-secondary);
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+      }
+      .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 5px;
+      }
+      .day-name {
+          text-align: center;
+          color: var(--accent);
+          font-weight: bold;
+          padding-bottom: 0.5rem;
+      }
+      .calendar-day {
+          background-color: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 4px;
+          min-height: 100px;
+          padding: 0.5rem;
+          cursor: pointer;
+          transition: background-color 0.2s;
+      }
+      .calendar-day:not(.empty):hover {
+          background-color: var(--bg-tertiary);
+      }
+      .calendar-day.empty {
+          background-color: transparent;
+          border: none;
+          cursor: default;
+      }
+      .events-container {
+        margin-top: 0.5rem;
+      }
+      .event-marker {
+        font-size: 0.75rem;
+        padding: 2px 5px;
+        border-radius: 4px;
+        margin-bottom: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .event-marker.event { background-color: #0f3460; }
+      .event-marker.exam { background-color: #e94560; color: #fff; }
+      .event-marker.assignment { background-color: #fca311; color: #000; }
+      .modal-overlay {
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background-color: rgba(0,0,0,0.7); display: flex;
+          justify-content: center; align-items: center; z-index: 100;
+      }
+      .modal-content {
+          background-color: var(--bg-secondary); padding: 2rem;
+          border-radius: 12px; width: 90%; max-width: 400px;
+      }
+      .modal-content h3 { color: var(--accent); margin-bottom: 1rem; }
+      .modal-content form { display: flex; flex-direction: column; gap: 1rem; }
+      .modal-content input, .modal-content select, .modal-content button {
+          padding: 0.8rem; border-radius: 8px; border: 1px solid var(--border-color);
+          background-color: var(--bg-tertiary); color: var(--text-secondary);
+          font-size: 1rem;
+      }
+      .modal-content button { background-color: var(--accent); cursor: pointer; }
+
+
       /* --- Responsive Design --- */
       @media (max-width: 768px) {
         .app-container {
@@ -858,6 +1078,7 @@ export default function App() {
         <div className="nav-links">
           <NavLink tab="dashboard" icon={<HomeIcon />}>Dashboard</NavLink>
           <NavLink tab="tasks" icon={<CheckSquareIcon />}>Tasks</NavLink>
+          <NavLink tab="scheduler" icon={<CalendarIcon />}>Scheduler</NavLink>
           <NavLink tab="focus" icon={<ClockIcon />}>Focus</NavLink>
           <NavLink tab="notes" icon={<BookOpenIcon />}>Notes</NavLink>
         </div>
